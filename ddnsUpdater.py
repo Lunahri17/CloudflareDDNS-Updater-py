@@ -2,7 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-def postDiscordWebhook(discordWebhookUri: str, exception: Exception = None, description: str = None) -> str:
+def postDiscordWebhook(discordWebhookUri: str, exception: Exception = None, description: str = None) -> requests.status_codes:
     if discordWebhookUri == '':
         return None
     
@@ -59,7 +59,32 @@ def getPublicIPv4(discordWebhookUri: str) -> str:
     return ip
 
 
-if __name__ == '__main__':
+def findRecordOnCloudflare(cloudflareURL, zoneIdentifier, cloudflareEmail, authMethod, apiKey, recordName) -> str:
+    if authMethod == 'global':
+        authMethodTag = "X-Auth-Key:"
+    else:
+        authMethodTag = "Authorization"
+        apiKey = "Bearer " + apiKey
+
+    headers = {
+        'X-Auth-Email': cloudflareEmail,
+        authMethodTag: apiKey,
+        'Content-Type': 'application/json'
+    }
+
+    url = cloudflareURL + zoneIdentifier + '/dns_records?type=A&name=' + recordName
+
+    try:
+        response = requests.get(url=url, headers=headers)    
+    except Exception as ex:
+        return ex
+    
+    if response.json()['result_info']['count'] == 0:
+        return None
+    
+    return response.json()['result'][0]['content']
+
+def main():
     
     # Load .env file
     load_dotenv()
@@ -71,12 +96,30 @@ if __name__ == '__main__':
     ttl               = os.getenv('TTL')
     proxy             = os.getenv('PROXY')
     discordWebhookUri = os.getenv('DISCORD_URI')
-    
-    ip = getPublicIPv4(discordWebhookUri)
+    discordUserID     = os.getenv('DISCORD_USER_ID')
 
+    #Params
+    cloudflareURL = 'https://api.cloudflare.com/client/v4/zones/'
+    
+
+    ip = getPublicIPv4(discordWebhookUri)
+    
     if ip == 0:
         postDiscordWebhook(discordWebhookUri, description="IP nula")
 
-    print(ip)
+    recordIP = findRecordOnCloudflare(cloudflareURL, zoneIdentifier, cloudflareEmail, authMethod, apiKey, recordName)
+
+    if recordIP == None:
+        postDiscordWebhook(discordWebhookUri, description=f"Record \"{recordName}\" not found.\n{discordUserID}")
+        return None
     
-    postDiscordWebhook(discordWebhookUri, description=f"<@275651418353041408>\nUpdated IP address for: {recordName}")
+    if ip == recordIP:
+        postDiscordWebhook(discordWebhookUri, description=f"The ip hasn\'t changed for the Record: {recordName}")
+        return None
+
+    postDiscordWebhook(discordWebhookUri, description=f"Updated IP address for: {recordName}\n{discordUserID}")
+
+
+#Program start
+if __name__ == '__main__':
+    main()
