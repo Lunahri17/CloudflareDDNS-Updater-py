@@ -14,7 +14,7 @@ def postDiscordWebhook(discordWebhookUri: str, exception: Exception = None, desc
     body = { "content": f"Description: {description} "}
     
     if exception != None:
-        body = '{ "content": "Exception: ' + exception + '\nDescription: ' + description + '" }'
+        body = { "content": f"Exception: {str(exception)}\nDescription: {description}" }
 
     try:
         response = requests.post(url=discordWebhookUri, headers=headers, json=body)        
@@ -77,9 +77,9 @@ def getRecordOnCloudflare(cloudflareURL: str, zoneIdentifier: str, headers: dict
     url = cloudflareURL + zoneIdentifier + '/dns_records?type=A&name=' + recordName
 
     try:
-        response = requests.get(url=url, headers=headers)    
+        response = requests.get(url=url, headers=headers)
     except Exception as ex:
-        return ex, ex
+        return ex, "ex"
     
     if response.json()['result_info']['count'] == 0:
         return None, None
@@ -132,6 +132,10 @@ def main():
 
     recordIP, recordID = getRecordOnCloudflare(cloudflareURL, zoneIdentifier, headers, recordName)
 
+    if recordID == "ex":
+        postDiscordWebhook(discordWebhookUri, description=f"Failed to connecto to Cloudflare, Abort.\n{discordUserID}", exception=recordIP)
+        return None
+    
     if recordIP == None:
         postDiscordWebhook(discordWebhookUri, description=f"Record \"{recordName}\" not found.\n{discordUserID}")
         return None
