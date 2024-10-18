@@ -58,8 +58,7 @@ def getPublicIPv4(discordWebhookUri: str) -> str:
 
     return ip
 
-
-def findRecordOnCloudflare(cloudflareURL, zoneIdentifier, cloudflareEmail, authMethod, apiKey, recordName) -> str:
+def setHeadersCloudflare(cloudflareEmail: str, authMethod: str, apiKey: str) -> dict:
     if authMethod == 'global':
         authMethodTag = "X-Auth-Key:"
     else:
@@ -72,17 +71,38 @@ def findRecordOnCloudflare(cloudflareURL, zoneIdentifier, cloudflareEmail, authM
         'Content-Type': 'application/json'
     }
 
+    return headers
+
+def getRecordOnCloudflare(cloudflareURL: str, zoneIdentifier: str, headers: dict, recordName: str) -> str:
     url = cloudflareURL + zoneIdentifier + '/dns_records?type=A&name=' + recordName
 
     try:
         response = requests.get(url=url, headers=headers)    
     except Exception as ex:
-        return ex
+        return ex, ex
     
     if response.json()['result_info']['count'] == 0:
-        return None
+        return None, None
     
-    return response.json()['result'][0]['content']
+    return response.json()['result'][0]['content'], response.json()['result'][0]['id']
+
+def updateRecordIPCloudflare(cloudflareURL: str, zoneIdentifier: str, recordID: str, headers: dict, recordName: str, ip: str, ttl: str, proxy: str) -> str:
+    url = cloudflareURL + zoneIdentifier + '/dns_records/' + recordID
+
+    body = {
+        "type": "A",
+        "name": recordName,
+        "content": ip,
+        "ttl": int(ttl),
+        "proxied": bool(proxy)
+    }
+
+    try:
+        response = requests.patch(url=url, headers=headers, json=body)    
+    except Exception as ex:
+        return ex
+
+    return response.json()
 
 def main():
     
@@ -100,14 +120,17 @@ def main():
 
     #Params
     cloudflareURL = 'https://api.cloudflare.com/client/v4/zones/'
-    
 
     ip = getPublicIPv4(discordWebhookUri)
     
     if ip == 0:
         postDiscordWebhook(discordWebhookUri, description="IP nula")
 
-    recordIP = findRecordOnCloudflare(cloudflareURL, zoneIdentifier, cloudflareEmail, authMethod, apiKey, recordName)
+    #use a local way to compare the ip, maybe use a env tag to disable this
+
+    headers = setHeadersCloudflare(cloudflareEmail, authMethod, apiKey)
+
+    recordIP, recordID = getRecordOnCloudflare(cloudflareURL, zoneIdentifier, headers, recordName)
 
     if recordIP == None:
         postDiscordWebhook(discordWebhookUri, description=f"Record \"{recordName}\" not found.\n{discordUserID}")
@@ -116,7 +139,13 @@ def main():
     if ip == recordIP:
         postDiscordWebhook(discordWebhookUri, description=f"The ip hasn\'t changed for the Record: {recordName}")
         return None
-
+    
+    response = updateRecordIPCloudflare(cloudflareURL, zoneIdentifier, recordID, headers, recordName, ip, ttl, proxy)
+    
+    if response['success'] == False:
+        postDiscordWebhook(discordWebhookUri, description=f'Error al actualizar el record.\nError: {response['errors'][0]['message']}\n{discordUserID}')
+        return None
+    
     postDiscordWebhook(discordWebhookUri, description=f"Updated IP address for: {recordName}\n{discordUserID}")
 
 
