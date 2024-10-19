@@ -98,9 +98,12 @@ def updateRecordIPCloudflare(cloudflareURL: str, zoneIdentifier: str, recordID: 
     }
 
     try:
-        response = requests.patch(url=url, headers=headers, json=body)    
+        response = requests.patch(url=url, headers=headers, json=body)
     except Exception as ex:
-        return ex
+        return {
+            "success": "ex",
+            "exception": ex
+        }
 
     return response.json()
 
@@ -120,7 +123,9 @@ def main():
 
     #Params
     cloudflareURL = 'https://api.cloudflare.com/client/v4/zones/'
+    headers = setHeadersCloudflare(cloudflareEmail, authMethod, apiKey)
 
+    #Get Public IP
     ip = getPublicIPv4(discordWebhookUri)
     
     if ip == 0:
@@ -128,8 +133,7 @@ def main():
 
     #use a local way to compare the ip, maybe use a env tag to disable this
 
-    headers = setHeadersCloudflare(cloudflareEmail, authMethod, apiKey)
-
+    #Get RecordID and RecordIP from Cloudflare
     recordIP, recordID = getRecordOnCloudflare(cloudflareURL, zoneIdentifier, headers, recordName)
 
     if recordID == "ex":
@@ -144,8 +148,14 @@ def main():
         postDiscordWebhook(discordWebhookUri, description=f"The ip hasn\'t changed for the Record: {recordName}")
         return None
     
+
+    #Update IP for the CloudFlare Record
     response = updateRecordIPCloudflare(cloudflareURL, zoneIdentifier, recordID, headers, recordName, ip, ttl, proxy)
     
+    if response['success'] == "ex":
+        postDiscordWebhook(discordWebhookUri, exception=response['exception'],description=f'Error al actualizar el record.\n{discordUserID}')
+        return None
+
     if response['success'] == False:
         postDiscordWebhook(discordWebhookUri, description=f'Error al actualizar el record.\nError: {response['errors'][0]['message']}\n{discordUserID}')
         return None
