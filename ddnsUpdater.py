@@ -2,6 +2,11 @@ import os
 import requests
 from dotenv import load_dotenv
 
+def toBoolean(var: str) -> bool:
+    if var == "false":
+        return False
+    return True
+
 def postDiscordWebhook(discordWebhookUri: str, exception: Exception = None, description: str = None) -> requests.status_codes:
     if discordWebhookUri == '':
         return None
@@ -94,7 +99,7 @@ def updateRecordIPCloudflare(cloudflareURL: str, zoneIdentifier: str, recordID: 
         "name": recordName,
         "content": ip,
         "ttl": int(ttl),
-        "proxied": bool(proxy)
+        "proxied": toBoolean(proxy)
     }
 
     try:
@@ -120,6 +125,7 @@ def main():
     proxy             = os.getenv('PROXY')
     discordWebhookUri = os.getenv('DISCORD_URI')
     discordUserID     = os.getenv('DISCORD_USER_ID')
+    saveLocalIP       = os.getenv('SAVE_LOCAL_IP')
 
     #Params
     cloudflareURL = 'https://api.cloudflare.com/client/v4/zones/'
@@ -132,6 +138,15 @@ def main():
         postDiscordWebhook(discordWebhookUri, description="IP nula")
 
     #use a local way to compare the ip, maybe use a env tag to disable this
+    if saveLocalIP == "on":
+        try:
+            with open(".saved.local.ip", 'r') as file:
+                savedLocalIP = file.read()
+            if ip == savedLocalIP:
+                return None
+        except FileNotFoundError as ex:
+            postDiscordWebhook(discordWebhookUri, exception=ex, description=f"Error when trying to access local ip file. Skiped to check on Cloudflare") 
+        
 
     #Get RecordID and RecordIP from Cloudflare
     recordIP, recordID = getRecordOnCloudflare(cloudflareURL, zoneIdentifier, headers, recordName)
@@ -146,6 +161,12 @@ def main():
     
     if ip == recordIP:
         postDiscordWebhook(discordWebhookUri, description=f"The ip hasn\'t changed for the Record: {recordName}")
+        if saveLocalIP == "on":
+            try:
+                with open('.saved.local.ip', 'w') as file:
+                    file.write(ip)
+            except Exception as ex:
+                postDiscordWebhook(discordWebhookUri, exception=ex, description=f"Failed to save \".saved.local.ip\" file.\n{discordUserID}")
         return None
     
 
@@ -162,6 +183,12 @@ def main():
     
     postDiscordWebhook(discordWebhookUri, description=f"Updated IP address for: {recordName}\n{discordUserID}")
 
+    if saveLocalIP == "on":
+        try:
+            with open('.saved.local.ip', 'w') as file:
+                file.write(ip)
+        except Exception as ex:
+            postDiscordWebhook(discordWebhookUri, exception=ex, description=f"Failed to save \".saved.local.ip\" file.\n{discordUserID}")
 
 #Program start
 if __name__ == '__main__':

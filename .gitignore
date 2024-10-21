@@ -1,3 +1,7 @@
+# ddnsUpdater.py files
+*.saved.local.ip
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
