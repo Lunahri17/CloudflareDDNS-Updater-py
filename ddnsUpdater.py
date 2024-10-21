@@ -1,5 +1,6 @@
 import os
 import requests
+from datetime import datetime
 from dotenv import load_dotenv
 
 def toBoolean(var: str) -> bool:
@@ -16,10 +17,14 @@ def postDiscordWebhook(discordWebhookUri: str, exception: Exception = None, desc
         'Content-Type': 'application/json'
     }
 
-    body = { "content": f"Description: {description} "}
+    body = { 
+        "content": f"Time: {datetime.now()}\nDescription: {description} "
+    }
     
     if exception != None:
-        body = { "content": f"Exception: {str(exception)}\nDescription: {description}" }
+        body = { 
+            "content": f"Time: {datetime.now()}\nException: {str(exception)}\nDescription: {description}" 
+        }
 
     try:
         response = requests.post(url=discordWebhookUri, headers=headers, json=body)        
